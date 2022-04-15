@@ -1,0 +1,2 @@
+bcompress 1
+gcompress 2
