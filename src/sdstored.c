@@ -11,6 +11,11 @@ char buffer[1024];
 int inicio = 0;
 int fim = 0;
 
+pid_t process[1024];
+int n_process = 0;
+
+
+
 int readc(int fd, char *line){
     if(fim == 0 || inicio == fim){
         fim = read(fd, buffer, sizeof(buffer));
@@ -29,20 +34,17 @@ int readln(int fd, char *line, int size){
     return i;
 }
 
-
 struct transf{
     char *idTransf;    
     int limit;
     int current;
 };
 
-
 int main(int argc, char *argv[]){
     if(argc < 3){
         perror("Missing arguments");
         return EXIT_FAILURE;
     }
-
 
     struct transf config[7];
     int fd = open(argv[1], O_RDONLY);
@@ -65,7 +67,7 @@ int main(int argc, char *argv[]){
     close(fd);
 
 
-    int log = mkfifo("log", 0664);
+    mkfifo("log", 0664);
 
     fd = open("log", O_RDONLY);
 
@@ -74,26 +76,88 @@ int main(int argc, char *argv[]){
         int n = 0;
         n = read(fd, message, sizeof(message));
         if(n != 0){
-            printf("li alguma coisa\n");
             message[n] = 0;
             char *args[20];
-            char *token = NULL;
-            int j = 0;
+            int n_transf = 0;
             for(char *token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
-                args[j] = strdup(token);
-                ++j;
+                args[n_transf] = strdup(token);
+                ++n_transf;
             }
-            args[j] = NULL;
-            if(!fork()){
-                int fd1 = open(args[0], O_RDONLY);
-                dup2(fd1, 0);
-                close(fd1);
-                int fd2 = open(args[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
-                dup2(fd2, 1);
-                close(fd2);
 
-                execvp(args[2], args + 2);
+            printf("%d\n", n_transf);
+
+            int pid = fork();
+            if(pid == 0){
+                if(n_transf == 3){ // so tem uma transformacao
+                    if(!fork()){
+                        int fd_in = open(args[0], O_RDONLY);
+                        int fd_out = open(args[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+                        dup2(fd_in, 0);
+                        close(fd_in);
+                        dup2(fd_out, 1);
+                        close(fd_out);
+                        execlp(args[2], args[2], NULL);
+                    }
+                }
+                else{
+                    int pipes[n_transf - 1][2];
+
+                    int current_pipe = 0;
+                    for(int i = 2; i < n_transf; ++i){
+                        if(i == 2){
+                            pipe(pipes[current_pipe]); 
+                            if(!fork()){
+                                int fd = open(args[0], O_RDONLY);
+                                dup2(fd, 0);
+                                close(fd);
+                                dup2(pipes[current_pipe][1], 1);
+                                close(pipes[current_pipe][1]);
+                                execlp(args[i], args[i], NULL);
+                            }
+                            else{
+                                close(pipes[current_pipe][1]);
+                                ++current_pipe;
+                            }
+                        }
+                        else if(i == n_transf - 1){
+                            if(!fork()){
+                                int fd = open(args[1], O_WRONLY | O_TRUNC | O_CREAT, 0664);
+                                dup2(fd, 1);
+                                close(fd);
+                                dup2(pipes[current_pipe - 1][0], 0);
+                                close(pipes[current_pipe - 1][0]);
+                                execlp(args[i], args[i], NULL);
+                            }
+                            else{
+                                close(pipes[current_pipe - 1][0]);
+                            }
+                        }
+                        else{
+                            pipe(pipes[current_pipe]);
+                            if(!fork()){
+                                dup2(pipes[current_pipe - 1][0], 0);
+                                close(pipes[current_pipe - 1][0]);
+                                dup2(pipes[current_pipe][1], 1);
+                                close(pipes[current_pipe][1]);
+                                execlp(args[i], args[i], NULL);
+                            }
+                            else{
+                                close(pipes[current_pipe - 1][0]);
+                                close(pipes[current_pipe][1]);
+                                ++current_pipe;
+                            }
+                        }
+                    }
+                }
+
             }
+            else{
+                if(n_process == 1024){
+                    n_process = 0;
+                }
+                process[n_process++] = pid;
+            }
+
         }
     }
 
