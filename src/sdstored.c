@@ -45,6 +45,8 @@ void sigchld_handler(int sig){
         if(i != -1){
             process_status[i] = TERMINATED;
             delete_process(i);
+            write(write_pipe, "concluded\n", sizeof("concluded\n"));
+            close(write_pipe);
         }
     }
 }
@@ -76,6 +78,7 @@ struct transf{
 
 int main(int argc, char *argv[]){
 
+    char *directory = strdup(argv[2]);
     signal(SIGCHLD, sigchld_handler);
 
     if(argc < 3){
@@ -141,7 +144,11 @@ int main(int argc, char *argv[]){
                         close(fd_in);
                         dup2(fd_out, 1);
                         close(fd_out);
-                        execlp(args[2], args[2], NULL);
+                        char transformacao[200];
+                        strcpy(transformacao, directory);
+                        strcat(transformacao, "/");
+                        strcat(transformacao, args[2]);
+                        execlp(transformacao, transformacao, NULL);
                         perror("Error executing");
                         _exit(1);
                     }
@@ -151,6 +158,10 @@ int main(int argc, char *argv[]){
 
                     int current_pipe = 0;
                     for(int i = 2; i < n_transf; ++i){
+                        char transformacao[200];
+                        strcpy(transformacao, directory);
+                        strcat(transformacao, "/");
+                        strcat(transformacao, args[i]);
                         if(i == 2){
                             pipe(pipes[current_pipe]); 
                             if(!fork()){
@@ -159,7 +170,7 @@ int main(int argc, char *argv[]){
                                 close(fd);
                                 dup2(pipes[current_pipe][1], 1);
                                 close(pipes[current_pipe][1]);
-                                execlp(args[i], args[i], NULL);
+                                execlp(transformacao, transformacao, NULL);
                                 perror("Error executing");
                                 _exit(1);
                             }
@@ -175,7 +186,7 @@ int main(int argc, char *argv[]){
                                 close(fd);
                                 dup2(pipes[current_pipe - 1][0], 0);
                                 close(pipes[current_pipe - 1][0]);
-                                execlp(args[i], args[i], NULL);
+                                execlp(transformacao, transformacao, NULL);
                                 perror("Error executing");
                                 _exit(1);
                             }
@@ -190,7 +201,7 @@ int main(int argc, char *argv[]){
                                 close(pipes[current_pipe - 1][0]);
                                 dup2(pipes[current_pipe][1], 1);
                                 close(pipes[current_pipe][1]);
-                                execlp(args[i], args[i], NULL);
+                                execlp(transformacao, transformacao, NULL);
                                 perror("Error executing");
                                 _exit(1);
                             }
@@ -211,7 +222,6 @@ int main(int argc, char *argv[]){
                 process[n_process] = pid;
                 process_status[n_process++] = EXECUTING;
                 write(write_pipe, "processing\n", sizeof("processing\n"));
-                close(write_pipe);
             }
 
         }
