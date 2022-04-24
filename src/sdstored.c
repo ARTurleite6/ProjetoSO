@@ -45,8 +45,6 @@ void sigchld_handler(int sig){
         if(i != -1){
             process_status[i] = TERMINATED;
             delete_process(i);
-            write(write_pipe, "concluded\n", sizeof("concluded\n"));
-            close(write_pipe);
         }
     }
 }
@@ -106,26 +104,16 @@ int main(int argc, char *argv[]){
     }
     close(fd);
 
-
     mkfifo("clientServer", 0664);
-
-    read_pipe = open("clientServer", O_RDONLY);
-
+    mkfifo("serverClient", 0664);
 
     while(1){
         char message[1024];
         int n = 0;
+        read_pipe = open("clientServer", O_RDONLY);
         n = read(read_pipe, message, sizeof(message));
-        if(n != 0){
-            write_pipe = open("serverClient", O_WRONLY);
-            if(write_pipe < 0){
-                perror("Error opening pipe");
-                return EXIT_FAILURE;
-            }
-            if(write(write_pipe, "pending\n", sizeof("pending\n")) <= 0){
-                perror("Error writing to pipe");
-                return EXIT_FAILURE;
-            }
+        close(read_pipe);
+        if(n > 0){
             message[n] = 0;
             char *args[20];
             int n_transf = 0;
@@ -134,10 +122,14 @@ int main(int argc, char *argv[]){
                 ++n_transf;
             }
 
+            write_pipe = open("serverClient", O_WRONLY);
+            write(write_pipe, "pending\n", sizeof("pending\n"));
+            write(write_pipe, "executing\n", sizeof("executing\n"));
             int pid = fork();
             if(pid == 0){
+                pid_t ultimo;
                 if(n_transf == 3){ // so tem uma transformacao
-                    if(!fork()){
+                    if(!(ultimo = fork())){
                         int fd_in = open(args[0], O_RDONLY);
                         int fd_out = open(args[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
                         dup2(fd_in, 0);
@@ -180,7 +172,7 @@ int main(int argc, char *argv[]){
                             }
                         }
                         else if(i == n_transf - 1){
-                            if(!fork()){
+                            if(!(ultimo = fork())){
                                 int fd = open(args[1], O_WRONLY | O_TRUNC | O_CREAT, 0664);
                                 dup2(fd, 1);
                                 close(fd);
@@ -213,21 +205,23 @@ int main(int argc, char *argv[]){
                         }
                     }
                 }
+                waitpid(ultimo, NULL, 0);
+                write(write_pipe, "concluded\n", sizeof("concluded\n"));
                 _exit(0);
             }
             else{
+                close(write_pipe);
                 if(n_process == 1024){
                     n_process = 0;
                 }
                 process[n_process] = pid;
                 process_status[n_process++] = EXECUTING;
-                write(write_pipe, "processing\n", sizeof("processing\n"));
             }
 
         }
+        close(read_pipe);
     }
 
-    close(read_pipe);
     unlink("clientServer");
 
     return 0;
