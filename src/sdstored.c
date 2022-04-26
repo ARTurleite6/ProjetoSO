@@ -15,8 +15,6 @@ char buffer[1024];
 int inicio = 0;
 int fim = 0;
 
-int read_pipe = 0;
-int write_pipe = 0;
 
 int process_status[1024];
 pid_t process[1024];
@@ -76,6 +74,7 @@ struct transf{
 
 int main(int argc, char *argv[]){
 
+    int read_pipe = 0;
     char *directory = strdup(argv[2]);
     signal(SIGCHLD, sigchld_handler);
 
@@ -105,7 +104,6 @@ int main(int argc, char *argv[]){
     close(fd);
 
     mkfifo("clientServer", 0664);
-    mkfifo("serverClient", 0664);
 
     while(1){
         char message[1024];
@@ -114,7 +112,7 @@ int main(int argc, char *argv[]){
         n = read(read_pipe, message, sizeof(message));
         close(read_pipe);
         if(n > 0){
-            message[n] = 0;
+            message[n] = '\0';
             char *args[20];
             int n_transf = 0;
             for(char *token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
@@ -122,13 +120,17 @@ int main(int argc, char *argv[]){
                 ++n_transf;
             }
 
-            write_pipe = open("serverClient", O_WRONLY);
-            write(write_pipe, "pending\n", sizeof("pending\n"));
-            write(write_pipe, "executing\n", sizeof("executing\n"));
+
             int pid = fork();
             if(pid == 0){
+                char pipe_write[100];
+                snprintf(pipe_write, 100, "serverClient%s", args[n_transf - 1]);
+
+                int write_pipe = open(pipe_write, O_WRONLY);
+                write(write_pipe, "pending\n", sizeof("pending\n"));
+                write(write_pipe, "executing\n", sizeof("executing\n"));
                 pid_t ultimo;
-                if(n_transf == 3){ // so tem uma transformacao
+                if(n_transf == 4){ // so tem uma transformacao
                     if(!(ultimo = fork())){
                         int fd_in = open(args[0], O_RDONLY);
                         int fd_out = open(args[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
@@ -149,7 +151,7 @@ int main(int argc, char *argv[]){
                     int pipes[n_transf - 1][2];
 
                     int current_pipe = 0;
-                    for(int i = 2; i < n_transf; ++i){
+                    for(int i = 2; i < n_transf - 1; ++i){
                         char transformacao[200];
                         strcpy(transformacao, directory);
                         strcat(transformacao, "/");
@@ -207,10 +209,10 @@ int main(int argc, char *argv[]){
                 }
                 waitpid(ultimo, NULL, 0);
                 write(write_pipe, "concluded\n", sizeof("concluded\n"));
+                close(write_pipe);
                 _exit(0);
             }
             else{
-                close(write_pipe);
                 if(n_process == 1024){
                     n_process = 0;
                 }

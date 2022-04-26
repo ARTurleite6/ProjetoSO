@@ -8,24 +8,32 @@
 
 int main(int argc, char *argv[]){
 
+    pid_t pid = getpid();
     char line[1024];
-    strcpy(line, argv[1]);
-    for(int i = 2; i < argc; ++i){
-        strcat(line, " ");
-        strcat(line, argv[i]);
-        
+    int n_bytes = 0;
+    for(int i = 1; i < argc; ++i){
+        n_bytes += snprintf(line + n_bytes, 1024, "%s ", argv[i]);
     }
+    n_bytes += snprintf(line + n_bytes, 1024, "%d ", pid);
+
+    char pipe_name[100];
+    snprintf(pipe_name, sizeof(pipe_name), "serverClient%d", pid);
+
+    mkfifo(pipe_name, 0664);
+    
 
     int write_pipe = open("clientServer", O_WRONLY);
     write(write_pipe, line, strlen(line));    
     close(write_pipe);
 
-    int n_bytes = 0;
-    int read_pipe = open("serverClient", O_RDONLY);
+    int read_pipe = open(pipe_name, O_RDONLY);
+    n_bytes = 0;
     while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
         write(1, line, n_bytes);    
     }
     close(read_pipe);
+
+    unlink(pipe_name);
 
     return 0;
 }
