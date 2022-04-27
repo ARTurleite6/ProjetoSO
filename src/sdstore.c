@@ -17,12 +17,12 @@ int main(int argc, char *argv[]){
     n_bytes += snprintf(line + n_bytes, 1024, "%d ", pid);
 
     char pipe_name[100];
-    snprintf(pipe_name, sizeof(pipe_name), "serverClient%d", pid);
+    snprintf(pipe_name, sizeof(pipe_name), "./tmp/serverClient%d", pid);
 
     mkfifo(pipe_name, 0664);
     
 
-    int write_pipe = open("clientServer", O_WRONLY);
+    int write_pipe = open("./tmp/clientServer", O_WRONLY);
     write(write_pipe, line, strlen(line));    
     close(write_pipe);
 
