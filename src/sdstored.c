@@ -24,7 +24,7 @@ int fim = 0;
 struct transf config[7];
 
 pid_t pids[1024];
-struct transf pid_transformation[1024][7];
+int pid_transformation[1024][7];
 int actual_pid = 0;
 
 int find_transformation(char *idTransf);
@@ -44,8 +44,8 @@ void sigchld_handler(int sig){
         if(index != -1){
             pids[index] = -1;
             for(int i = 0; i < 7; ++i){
-                config[i].current -= pid_transformation[index][i].current;
-                pid_transformation[index][i].current = 0;
+                config[i].current -= pid_transformation[index][i];
+                pid_transformation[index][i] = 0;
             }
         }
     }
@@ -122,17 +122,16 @@ int main(int argc, char *argv[]){
             message[n] = '\0';
             char *args[20];
             int n_transf = 0;
-            struct transf pedido[7];
+            int pedido[7];
             for(int i = 0; i < 7; ++i){
-                pedido[i].idTransf = strdup(config[i].idTransf); 
-                pedido[i].current = 0;
+                pedido[i] = 0;
             }
             for(char *token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
                 args[n_transf] = strdup(token);
                 int i = find_transformation(token);
                 if(i != -1){
                     ++config[i].current;
-                    ++pedido[i].current;
+                    ++pedido[i];
                 }
                 ++n_transf;
             }
@@ -246,7 +245,7 @@ int main(int argc, char *argv[]){
             }
             else{
                 pids[actual_pid] = pid;
-                memcpy(pid_transformation[actual_pid++], pedido, sizeof(struct transf) * 7);
+                memcpy(pid_transformation[actual_pid++], pedido, sizeof(int) * 7);
                 actual_pid %= 1024; 
             }
         }
