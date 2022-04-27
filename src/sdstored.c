@@ -7,7 +7,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define PENDING 0
+#define WAITING 0
 #define EXECUTING 1
 #define TERMINATED 2
 
@@ -17,13 +17,15 @@ struct transf{
     int limit;
     int current;
 };
+struct transf config[7];
 
 char buffer[1024];
 int inicio = 0;
 int fim = 0;
-struct transf config[7];
 
 pid_t pids[1024];
+char *pid_tasks[1024];
+int pid_status[1024];
 int pid_transformation[1024][7];
 int actual_pid = 0;
 
@@ -47,6 +49,8 @@ void sigchld_handler(int sig){
                 config[i].current -= pid_transformation[index][i];
                 pid_transformation[index][i] = 0;
             }
+            pid_status[index] = TERMINATED;
+            free(pid_tasks[index]);
         }
     }
 }
@@ -120,6 +124,7 @@ int main(int argc, char *argv[]){
         close(read_pipe);
         if(n > 0){
             message[n] = '\0';
+            pid_tasks[actual_pid] = strdup(message);
             char *args[20];
             int n_transf = 0;
             int pedido[7];
@@ -147,8 +152,14 @@ int main(int argc, char *argv[]){
                 //cliente passa status
                 if(n_transf == 2){
                     if(!strcmp(args[0], "status")){
+                        char status[100];
+                        for(int i = 0; i < 1024; ++i){
+                            if(pid_status[i] == EXECUTING){
+                                int status_size = snprintf(status, 100, "task %d : %s\n", i, pid_tasks[i]);
+                                write(write_pipe, status, status_size);
+                            }
+                        }
                         for(int i = 0; i < 7; ++i){
-                            char status[100];
                             int status_size = snprintf(status, sizeof(status), "transf %s: %d/%d (running/max)\n", config[i].idTransf, config[i].current, config->limit);
                             write(write_pipe, status, status_size);
                         }
@@ -166,9 +177,7 @@ int main(int argc, char *argv[]){
                         dup2(fd_out, 1);
                         close(fd_out);
                         char transformacao[200];
-                        strcpy(transformacao, directory);
-                        strcat(transformacao, "/");
-                        strcat(transformacao, args[2]);
+                        snprintf(transformacao, sizeof(transformacao), "%s/%s", directory, args[2]);
                         execlp(transformacao, transformacao, NULL);
                         perror("Error executing");
                         _exit(1);
@@ -182,9 +191,7 @@ int main(int argc, char *argv[]){
                     int current_pipe = 0;
                     for(int i = 2; i < n_transf - 1; ++i){
                         char transformacao[200];
-                        strcpy(transformacao, directory);
-                        strcat(transformacao, "/");
-                        strcat(transformacao, args[i]);
+                        snprintf(transformacao, sizeof(transformacao), "%s/%s", directory, args[i]);
                         if(i == 2){
                             pipe(pipes[current_pipe]); 
                             if(!fork()){
@@ -245,6 +252,7 @@ int main(int argc, char *argv[]){
             }
             else{
                 pids[actual_pid] = pid;
+                pid_status[actual_pid] = EXECUTING;
                 memcpy(pid_transformation[actual_pid++], pedido, sizeof(int) * 7);
                 actual_pid %= 1024; 
             }
