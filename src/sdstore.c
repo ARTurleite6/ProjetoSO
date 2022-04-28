@@ -26,14 +26,18 @@ int main(int argc, char *argv[]){
     write(write_pipe, line, strlen(line));    
     close(write_pipe);
 
-    int read_pipe = open(pipe_name, O_RDONLY);
-    n_bytes = 0;
-    while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
-        write(1, line, n_bytes);    
+    puts(argv[1]);
+    if(!strcmp("exit\n", argv[1])){
+        int read_pipe = open(pipe_name, O_RDONLY);
+        n_bytes = 0;
+        while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
+            write(1, line, n_bytes);    
+        }
+        close(read_pipe);
     }
-    close(read_pipe);
 
     unlink(pipe_name);
+
 
     return 0;
 }

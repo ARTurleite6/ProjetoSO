@@ -82,7 +82,6 @@ int find_transformation(char *idTransf){
 
 int main(int argc, char *argv[]){
 
-    int read_pipe = 0;
     char *directory = strdup(argv[2]);
     signal(SIGCHLD, sigchld_handler);
 
@@ -105,7 +104,7 @@ int main(int argc, char *argv[]){
         char *temp = strdup(line);
         char *trans = strdup(strtok(temp, " "));
         int limit = atoi(strtok(NULL, " "));
-        
+
         config[i].idTransf = trans;
         config[i].current = 0;
         config[i++].limit = limit;
@@ -115,31 +114,34 @@ int main(int argc, char *argv[]){
     close(fd);
 
     mkfifo("./tmp/clientServer", 0664);
+    int read_pipe = open("./tmp/clientServer", O_RDONLY);
+    int close_controller = open("./tmp/clientServer", O_WRONLY);
 
-    while(1){
-        char message[1024];
-        int n = 0;
-        read_pipe = open("./tmp/clientServer", O_RDONLY);
-        n = read(read_pipe, message, sizeof(message));
-        close(read_pipe);
-        if(n > 0){
-            message[n] = '\0';
-            pid_tasks[actual_pid] = strdup(message);
-            char *args[20];
-            int n_transf = 0;
-            int pedido[7];
-            for(int i = 0; i < 7; ++i){
-                pedido[i] = 0;
+    int n_bytes_read = 0;
+    char message[1024];
+    while((n_bytes_read = read(read_pipe, message, sizeof(message) - 1)) > 0){
+        message[n_bytes_read - 1] = '\0';
+        pid_tasks[actual_pid] = strdup(message);
+        char *args[20];
+        int n_transf = 0;
+        int pedido[7];
+        for(int i = 0; i < 7; ++i){
+            pedido[i] = 0;
+        }
+        for(char *token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
+            args[n_transf] = strdup(token);
+            int i = find_transformation(token);
+            if(i != -1){
+                ++config[i].current;
+                ++pedido[i];
             }
-            for(char *token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
-                args[n_transf] = strdup(token);
-                int i = find_transformation(token);
-                if(i != -1){
-                    ++config[i].current;
-                    ++pedido[i];
-                }
-                ++n_transf;
-            }
+            ++n_transf;
+        }
+        if(strcmp(args[0], "exit") == 0) {
+            printf("Server closed\n");
+            close(close_controller);
+        }
+        else{
 
 
             int pid = fork();
@@ -257,8 +259,8 @@ int main(int argc, char *argv[]){
                 actual_pid %= 1024; 
             }
         }
-        close(read_pipe);
     }
+    close(read_pipe);
 
     unlink("clientServer");
 
