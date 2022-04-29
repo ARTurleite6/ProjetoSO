@@ -4,6 +4,8 @@ server: bin/sdstored
 
 client: bin/sdstore
 
+queue : bin/queue
+
 bin/sdstored: obj/sdstored.o
 	gcc -g obj/sdstored.o -o bin/sdstored
 
@@ -15,6 +17,7 @@ bin/sdstore: obj/sdstore.o
 
 obj/sdstore.o: src/sdstore.c
 	gcc -Wall -g -c src/sdstore.c -o obj/sdstore.o
+
 
 clean:
 	rm obj/* tmp/* bin/{sdstore,sdstored}
