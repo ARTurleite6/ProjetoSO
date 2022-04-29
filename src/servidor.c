@@ -132,10 +132,12 @@ int main(int argc, char *argv[]){
 
     char line[1024];
     int n_bytes = 0;
-        int monitor_pipe = open("server_monitor", O_WRONLY);
+    int monitor_pipe;
     while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
-
+        monitor_pipe = open("server_monitor", O_WRONLY);
         write(monitor_pipe, line, n_bytes);
+        close(monitor_pipe);
+        puts("desbloqueou");
         line[n_bytes] = 0;
         int n_transf = 0;
         char **pedido = process_request(line, &n_transf);
@@ -167,9 +169,7 @@ int main(int argc, char *argv[]){
         }
     }
 
-
     close(read_pipe);
-    close(monitor_pipe);
 
     unlink("client_server");
     unlink("server_monitor");
