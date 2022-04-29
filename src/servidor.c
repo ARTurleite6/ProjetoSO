@@ -116,6 +116,7 @@ int main(int argc, char *argv[]){
     /* } */
     /* close(fd); */
     /*  */
+    mkfifo("server_monitor", 0664);
     if(!fork()){
         execl("./monitor", "./monitor", argv[1], argv[2], NULL);
         perror("Error executing");
