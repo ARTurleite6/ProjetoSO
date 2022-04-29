@@ -54,10 +54,14 @@ struct fila{
 
 void push(char **pedido, int num_transf){
     struct fila *new = (struct fila *)malloc(sizeof(struct fila)); 
-    new->next = queue;
+    struct fila **fila = &queue;
+    while(*fila){
+      fila = &((*fila)->next);
+    }
+    new->next = NULL;
     new->pedidos = pedido;
     new->n_pedidos = num_transf;
-    queue = new;
+    *fila = new;
 }
 
 char **process_request(char *request, int *size){
@@ -111,8 +115,6 @@ void execute(){
             }
         }
     }
-
-    puts("teste");
     if(pode){
         puts("pode executar");
 
@@ -241,7 +243,7 @@ int main(int argc, char *argv[]){
     signal(SIGCHLD, sigchld_handler);
 
     int config = open(argv[1], O_RDONLY);
-    if(config < 0){
+    if (config < 0) {
         perror("File doesn't exist");
         return EXIT_FAILURE;
     }
@@ -251,7 +253,7 @@ int main(int argc, char *argv[]){
     int i = 0;
     int n_bytes = 0;
     char line[1024];
-    while((n_bytes = readln(config, line, sizeof(line))) > 0){
+    while ((n_bytes = readln(config, line, sizeof(line))) > 0) {
         line[n_bytes - 1] = 0;
         char *transform = strtok(line, " ");
         configuracao.idTransf[i] = strdup(transform);
@@ -262,41 +264,51 @@ int main(int argc, char *argv[]){
     }
     close(config);
 
-    int server_monitor = open("server_monitor", O_RDONLY);
-    while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){
-        line[n_bytes] = 0;
-        int n_transf = 0;
-        char **request = process_request(line, &n_transf);
-        if(strcmp(request[0], "status") == 0){
-            if(!fork()){
-                int fd = open(request[1], O_WRONLY);
-                if(fd < 0){
+    int server_monitor = open("server_monitor", O_RDONLY | O_NONBLOCK);
+    /* while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){ */
+    while (1) {
+        n_bytes = read(server_monitor, line, sizeof(line));
+        if (n_bytes > 0) {
+            line[n_bytes] = 0;
+            int n_transf = 0;
+            char **request = process_request(line, &n_transf);
+            if (strcmp(request[0], "status") == 0) {
+                if (!fork()) {
+                    int fd = open(request[1], O_WRONLY);
+                    if (fd < 0) {
+                        perror("Error opening pipe");
+                        exit(1);
+                    }
+                    char answer[1024];
+                    int n_bytes_answer = 0;
+                    for (int i = 0; i < 7; ++i) {
+                        n_bytes_answer += snprintf(
+                            answer + n_bytes_answer,
+                            sizeof(answer) - n_bytes_answer, "%s : %d/%d\n",
+                            configuracao.idTransf[i], configuracao.current[i],
+                            configuracao.limit[i]);
+                    }
+                    write(fd, answer, n_bytes_answer);
+                    close(fd);
+                    _exit(0);
+                }
+            } else {
+                push(request, n_transf);
+                int fd = open(request[n_transf - 1], O_WRONLY);
+                if (fd < 0) {
                     perror("Error opening pipe");
                     exit(1);
                 }
-                char answer[1024];
-                int n_bytes_answer = 0;
-                for(int i = 0; i < 7; ++i){
-                    n_bytes_answer += snprintf(answer + n_bytes_answer, sizeof(answer) - n_bytes_answer, "%s : %d/%d\n", configuracao.idTransf[i], configuracao.current[i], configuracao.limit[i]); 
-                }
-                write(fd, answer, n_bytes_answer);
+                write(fd, "pending\n", sizeof("pending\n"));
                 close(fd);
-                _exit(0);
+                execute();
             }
         }
-        else{
-            push(request, n_transf); 
-            int fd = open(request[n_transf - 1], O_WRONLY);
-            if(fd < 0){
-                perror("Error opening pipe"); 
-                exit(1);
-            }
-            write(fd, "pending\n", sizeof("pending\n"));
-            close(fd);
-            execute();
-
+        else {
+          if(queue != NULL) execute();
         }
     }
+
     close(server_monitor);
 
 }

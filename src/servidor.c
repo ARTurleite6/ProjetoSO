@@ -129,10 +129,10 @@ int main(int argc, char *argv[]){
 
     int read_pipe = open("client_server", O_RDONLY);
     int close_pipe = open("client_server", O_WRONLY);
-    int monitor_pipe = open("server_monitor", O_WRONLY);
 
     char line[1024];
     int n_bytes = 0;
+        int monitor_pipe = open("server_monitor", O_WRONLY);
     while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
 
         write(monitor_pipe, line, n_bytes);
@@ -172,5 +172,6 @@ int main(int argc, char *argv[]){
     close(monitor_pipe);
 
     unlink("client_server");
+    unlink("server_monitor");
 
 }
