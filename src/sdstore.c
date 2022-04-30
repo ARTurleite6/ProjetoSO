@@ -1,43 +1,60 @@
-#include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#include <string.h>
 
 int main(int argc, char *argv[]){
+    int n_bytes = 0;
+    char request[200];
 
     pid_t pid = getpid();
-    char line[1024];
-    int n_bytes = 0;
+
     for(int i = 1; i < argc; ++i){
-        n_bytes += snprintf(line + n_bytes, 1024, "%s ", argv[i]);
+        n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[i]);
     }
-    n_bytes += snprintf(line + n_bytes, 1024, "%d ", pid);
 
-    char pipe_name[100];
-    snprintf(pipe_name, sizeof(pipe_name), "./tmp/serverClient%d", pid);
+    int server_pipe = open("./tmp/client_server", O_WRONLY);
+    if(server_pipe < 0){
+        perror("Error opening server pipe");
+        return 1;
+    }
 
-    mkfifo(pipe_name, 0664);
-    
+    char client_pipe_str[200];
+    snprintf(client_pipe_str, sizeof(client_pipe_str), "./tmp/server_cliente%d", pid);
+    mkfifo(client_pipe_str, 0664);
+    n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s", client_pipe_str);
 
-    int write_pipe = open("./tmp/clientServer", O_WRONLY);
-    write(write_pipe, line, strlen(line));    
-    close(write_pipe);
+    write(server_pipe, request, n_bytes);
+    close(server_pipe);
 
-    puts(argv[1]);
-    if(!strcmp("exit\n", argv[1])){
-        int read_pipe = open(pipe_name, O_RDONLY);
-        n_bytes = 0;
-        while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
-            write(1, line, n_bytes);    
+    if(!strcmp(argv[1], "status")){
+        int client_pipe = open(client_pipe_str, O_RDONLY);
+        char buffer[1024];
+        int n_bytes;
+        n_bytes = read(client_pipe, buffer, sizeof(buffer));
+        write(1, buffer, n_bytes);
+        close(client_pipe);
+    }
+    else if(!strcmp(argv[1], "exit")){
+
+    }
+    else{
+
+        int client_pipe = open(client_pipe_str, O_RDONLY);
+        int close_pipe = open(client_pipe_str, O_WRONLY);
+        int answer_bytes = 0;
+        char answer[1024];
+        while((answer_bytes = read(client_pipe, answer, sizeof(answer))) > 0){
+            write(1, answer, answer_bytes);
+            answer[answer_bytes] = 0;
+            if(strcmp(answer, "concluded\n") == 0){
+                close(close_pipe);
+            }
         }
-        close(read_pipe);
+        close(client_pipe);
     }
-
-    unlink(pipe_name);
-
-
+    unlink(client_pipe_str);
     return 0;
 }

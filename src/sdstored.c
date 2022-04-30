@@ -1,90 +1,35 @@
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
+#include <string.h>
 
-#define WAITING 0
-#define EXECUTING 1
-#define TERMINATED 2
-
-typedef struct queue{
-    char *request[20];
-    int n_transforms;
-    struct queue *next;
-} *Queue;
-
-
-//creates a new queue
-Queue createQueue(){
-    Queue q = (Queue)malloc(sizeof(struct queue));
-    q->next = NULL;
-    return q;
-}
-
-Queue push(Queue q, char *request[], int n_requests){
-    Queue temp = createQueue();
-    for(int i = 0; i < n_requests; ++i){
-        q->request[q->n_transforms++] = strdup(request[i]);
-    }
-    temp->next = q;
-    return temp;
-}
-
-void dequeue(Queue q){
-    for(int i = 0; i < q->n_transforms; ++i){
-        free(q->request[i]);
-    }
-    Queue aux = q;
-    q = q->next;
-    free(aux);
-}
-
-struct transf{
-    char *idTransf;    
-    int limit;
-    int current;
+struct config{
+    char *idTransf[7];
+    int limit[7];
+    int current[7];
 };
-struct transf config[7];
+
+struct fila{
+    char **pedidos;
+    int n_pedidos;
+    struct fila *next;
+};
+
+struct fila *push(struct fila *q, char **pedido, int num_transf){
+    struct fila *new = (struct fila *)malloc(sizeof(struct fila)); 
+    new->next = q;
+    new->pedidos = pedido;
+    new->n_pedidos = num_transf;
+    return new;
+}
 
 char buffer[1024];
 int inicio = 0;
 int fim = 0;
-
-pid_t pids[1024];
-char *pid_tasks[1024];
-int pid_status[1024];
-int pid_transformation[1024][7];
-int actual_pid = 0;
-
-int find_transformation(char *idTransf);
-
-int find_pid(pid_t pid){
-    for(int i = 0; i < actual_pid; ++i){
-        if(pids[i] == pid) return i;
-    }
-    return -1;
-}
-
-void sigchld_handler(int sig){
-    int status = 0;
-    pid_t pid = 0;
-    while((pid = waitpid(-1, &status, 0)) > 0){
-        int index = find_pid(pid);
-        if(index != -1){
-            pids[index] = -1;
-            for(int i = 0; i < 7; ++i){
-                config[i].current -= pid_transformation[index][i];
-                pid_transformation[index][i] = 0;
-            }
-            pid_status[index] = TERMINATED;
-            free(pid_tasks[index]);
-        }
-    }
-}
 
 int readc(int fd, char *line){
     if(fim == 0 || inicio == fim){
@@ -104,26 +49,46 @@ int readln(int fd, char *line, int size){
     return i;
 }
 
-int find_transformation(char *idTransf){
-    for(int i = 0; i < 7; i++){
-        if(strcmp(config[i].idTransf, idTransf) == 0) return i;
+char **process_request(char *request, int *size){
+    char **pedidos = (char**)malloc(sizeof(char *) * 40);     
+
+    int i = 0;
+    for(char *token = strtok(request, " "); token != NULL; token = strtok(NULL, " ")){
+        pedidos[i++] = strdup(token);
     }
-    return -1;
+
+    *size = i;
+
+    return pedidos;
 }
 
-int can_execute(Queue q){
-     
+struct fila *execute(struct fila *queue, struct config *config){
+    struct config pedido;
+    memcpy(&pedido, config, sizeof(struct config));
+    int pode = 1;
+    for(int i = 0; i < 7 && pode; ++i){
+        pedido.current[i] = 0;
+        for(int j = 2; j < queue->n_pedidos && pode; ++j){
+            if(strcmp(queue->pedidos[j], pedido.idTransf[i]) == 0){
+                ++pedido.current[i];
+                if(pedido.current[i] > config->limit[i]) pode = 0;
+            }
+        }
+    }
+
+    if(!pode) return queue;
+    
+    for(int i = 0; i < 7; ++i){
+        printf("%s -> %d\n", pedido.idTransf[i], pedido.current[i]);
+    }
+    return queue;
 }
 
 int main(int argc, char *argv[]){
 
-    char *directory = strdup(argv[2]);
-    signal(SIGCHLD, sigchld_handler);
-    mkfifo("server_monitor", 0666);
-
     if(argc < 3){
-        perror("Missing arguments");
-        return EXIT_FAILURE;
+        perror("Wrong number of arguments");
+        exit(1);
     }
 
     int fd = open(argv[1], O_RDONLY);
@@ -131,186 +96,80 @@ int main(int argc, char *argv[]){
         perror("File doesn't exist");
         return EXIT_FAILURE;
     }
-    int n_bytes = 0;
+
+    /* struct config configuracao; */
+    /*  */
+    /* struct fila *queue = NULL; */
+    /*  */
+    /* int i = 0; */
+    /* int n_bytes = 0; */
+    /* char line[1024]; */
+    /* while((n_bytes = readln(fd, line, sizeof(line))) > 0){ */
+    /*     line[n_bytes - 1] = 0; */
+    /*     char *transform = strtok(line, " "); */
+    /*     configuracao.idTransf[i] = strdup(transform); */
+    /*     int limit = atoi(strtok(NULL, " ")); */
+    /*     configuracao.limit[i] = limit; */
+    /*     configuracao.current[i] = 0; */
+    /*     i++; */
+    /* } */
+    /* close(fd); */
+    /*  */
+    mkfifo("./tmp/server_monitor", 0664);
+    if(!fork()){
+        execl("./bin/monitor", "./bin/monitor", argv[1], argv[2], NULL);
+        perror("Error executing");
+        _exit(1);
+    }
+    if(!fork()){
+        _exit(1);
+    }
+    mkfifo("./tmp/client_server", 0664);     
+
+    int read_pipe = open("./tmp/client_server", O_RDONLY);
+    int close_pipe = open("./tmp/client_server", O_WRONLY);
+
     char line[1024];
-
-    int i = 0;
-    while((n_bytes = readln(fd, line, sizeof(line))) > 0){
-        line[n_bytes - 1] = 0;
-        char *temp = strdup(line);
-        char *trans = strdup(strtok(temp, " "));
-        int limit = atoi(strtok(NULL, " "));
-
-        config[i].idTransf = trans;
-        config[i].current = 0;
-        config[i++].limit = limit;
-    }
-    for(int i = 0; i < 7; ++i){
-    }
-    close(fd);
-
-    mkfifo("./tmp/clientServer", 0664);
-    int read_pipe = open("./tmp/clientServer", O_RDONLY);
-    int close_controller = open("./tmp/clientServer", O_WRONLY);
-
-    int n_bytes_read = 0;
-    char message[1024];
-    Queue q = createQueue();
-
-    while((n_bytes_read = read(read_pipe, message, sizeof(message) - 1)) > 0){
-        message[n_bytes_read - 1] = '\0';
-        pid_tasks[actual_pid] = strdup(message);
-
-        char *args[20];
+    int n_bytes = 0;
+    int monitor_pipe;
+    while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
+        monitor_pipe = open("./tmp/server_monitor", O_WRONLY);
+        write(monitor_pipe, line, n_bytes);
+        close(monitor_pipe);
+        line[n_bytes] = 0;
         int n_transf = 0;
-        int pedido[7];
-        for(int i = 0; i < 7; ++i){
-            pedido[i] = 0;
-        }
-
-
-        // atualiza contadores
-        char *token = NULL;
-        for(token = strtok(message, " "); token != NULL; token = strtok(NULL, " ")){
-            args[n_transf] = token;
-            int i = find_transformation(token);
-            if(i != -1){
-                ++config[i].current;
-                ++pedido[i];
-            }
-            ++n_transf;
-        }
-
-        if(strcmp(args[0], "exit") == 0) {
-            printf("Server closed\n");
-            close(close_controller);
+        char **pedido = process_request(line, &n_transf);
+        /* if(strcmp(pedido[0], "status") == 0){ */
+        /*     if(!fork()){ */
+        /*         int fd = open(pedido[1], O_WRONLY); */
+        /*         if(fd < 0){ */
+        /*             perror("Error opening pipe"); */
+        /*             exit(1); */
+        /*         } */
+        /*         close(fd); */
+        /*         _exit(0); */
+        /*     } */
+        /* } */
+        if(strcmp(pedido[0], "exit") == 0){
+            close(close_pipe);
         }
         else{
-            push(q, args, n_transf);
-
-            /* if(can_execute(q)){ */
-            /*  */
-            /*     int pid = fork(); */
-            /*     if(pid == 0){ */
-            /*         char pipe_write[100]; */
-            /*         snprintf(pipe_write, 100, "./tmp/serverClient%s", q->request[q->n_transforms - 1]); */
-            /*  */
-            /*         int write_pipe = open(pipe_write, O_WRONLY); */
-            /*         pid_t ultimo = -1; */
-            /*         //cliente passa status */
-            /*         if(q->n_transforms == 2){ */
-            /*             if(!strcmp(q->request[0], "status")){ */
-            /*                 char status[100]; */
-            /*                 for(int i = 0; i < 1024; ++i){ */
-            /*                     if(pid_status[i] == EXECUTING){ */
-            /*                         int status_size = snprintf(status, 100, "task %d : %s\n", i, pid_tasks[i]); */
-            /*                         write(write_pipe, status, status_size); */
-            /*                     } */
-            /*                 } */
-            /*                 for(int i = 0; i < 7; ++i){ */
-            /*                     int status_size = snprintf(status, sizeof(status), "transf %s: %d/%d (running/max)\n", config[i].idTransf, config[i].current, config->limit); */
-            /*                     write(write_pipe, status, status_size); */
-            /*                 } */
-            /*             } */
-            /*         } */
-            /*         // uma transformacao */
-            /*         else if(q->n_transforms == 4){ // so tem uma transformacao */
-            /*             write(write_pipe, "pending\n", sizeof("pending\n")); */
-            /*             write(write_pipe, "executing\n", sizeof("executing\n")); */
-            /*             if(!(ultimo = fork())){ */
-            /*                 int fd_in = open(args[0], O_RDONLY); */
-            /*                 int fd_out = open(args[1], O_WRONLY | O_CREAT | O_TRUNC, 0664); */
-            /*                 dup2(fd_in, 0); */
-            /*                 close(fd_in); */
-            /*                 dup2(fd_out, 1); */
-            /*                 close(fd_out); */
-            /*                 char transformacao[200]; */
-            /*                 snprintf(transformacao, sizeof(transformacao), "%s/%s", directory, args[2]); */
-            /*                 execlp(transformacao, transformacao, NULL); */
-            /*                 perror("Error executing"); */
-            /*                 _exit(1); */
-            /*             } */
-            /*         } */
-            /*         else{ */
-            /*             write(write_pipe, "pending\n", sizeof("pending\n")); */
-            /*             write(write_pipe, "executing\n", sizeof("executing\n")); */
-            /*             int pipes[n_transf - 2][2]; */
-            /*  */
-            /*             int current_pipe = 0; */
-            /*             for(int i = 2; i < n_transf - 1; ++i){ */
-            /*                 char transformacao[200]; */
-            /*                 snprintf(transformacao, sizeof(transformacao), "%s/%s", directory, args[i]); */
-            /*                 if(i == 2){ */
-            /*                     pipe(pipes[current_pipe]);  */
-            /*                     if(!fork()){ */
-            /*                         int fd = open(args[0], O_RDONLY); */
-            /*                         dup2(fd, 0); */
-            /*                         close(fd); */
-            /*                         dup2(pipes[current_pipe][1], 1); */
-            /*                         close(pipes[current_pipe][1]); */
-            /*                         execlp(transformacao, transformacao, NULL); */
-            /*                         perror("Error executing"); */
-            /*                         _exit(1); */
-            /*                     } */
-            /*                     else{ */
-            /*                         close(pipes[current_pipe][1]); */
-            /*                         ++current_pipe; */
-            /*                     } */
-            /*                 } */
-            /*                 else if(i == n_transf - 2){ */
-            /*                     if(!(ultimo = fork())){ */
-            /*                         int fd = open(args[1], O_WRONLY | O_TRUNC | O_CREAT, 0664); */
-            /*                         dup2(fd, 1); */
-            /*                         close(fd); */
-            /*                         dup2(pipes[current_pipe - 1][0], 0); */
-            /*                         close(pipes[current_pipe - 1][0]); */
-            /*                         execlp(transformacao, transformacao, NULL); */
-            /*                         perror("Error executing"); */
-            /*                         _exit(1); */
-            /*                     } */
-            /*                     else{ */
-            /*                         close(pipes[current_pipe - 1][0]); */
-            /*                     } */
-            /*                 } */
-            /*                 else{ */
-            /*                     pipe(pipes[current_pipe]); */
-            /*                     if(!fork()){ */
-            /*                         dup2(pipes[current_pipe - 1][0], 0); */
-            /*                         close(pipes[current_pipe - 1][0]); */
-            /*                         dup2(pipes[current_pipe][1], 1); */
-            /*                         close(pipes[current_pipe][1]); */
-            /*                         execlp(transformacao, transformacao, NULL); */
-            /*                         perror("Error executing"); */
-            /*                         _exit(1); */
-            /*                     } */
-            /*                     else{ */
-            /*                         close(pipes[current_pipe - 1][0]); */
-            /*                         close(pipes[current_pipe][1]); */
-            /*                         ++current_pipe; */
-            /*                     } */
-            /*                 } */
-            /*             } */
-            /*         } */
-            /*         if(ultimo != -1){ */
-            /*             waitpid(ultimo, NULL, 0); */
-            /*             write(write_pipe, "concluded\n", sizeof("concluded\n")); */
-            /*         } */
-            /*         close(write_pipe); */
-            /*         _exit(0); */
-            /*     } */
-            /*     else{ */
-            /*         pids[actual_pid] = pid; */
-            /*         pid_status[actual_pid] = EXECUTING; */
-            /*         memcpy(pid_transformation[actual_pid++], pedido, sizeof(int) * 7); */
-            /*         actual_pid %= 1024;  */
-            /*     } */
+            /* write(monitor_pipe, line, n_bytes); */
+            /* queue = push(queue, pedido, n_transf);  */
+            /* int fd = open(pedido[n_transf - 1], O_WRONLY); */
+            /* if(fd < 0){ */
+            /*     perror("Error opening pipe");  */
+            /*     exit(1); */
             /* } */
+            /* write(fd, "pending\n", sizeof("pending\n")); */
+            /* close(fd); */
+            /* queue = execute(queue, &configuracao); */
         }
     }
+
     close(read_pipe);
 
-    unlink("client_server");
-    unlink("server_monitor");
+    unlink("./tmp/client_server");
+    unlink("./tmp/server_monitor");
 
-    return 0;
 }

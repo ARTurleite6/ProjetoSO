@@ -1,10 +1,16 @@
-all: server client
+all: server client monitor
 
 server: bin/sdstored
 
 client: bin/sdstore
 
-queue : bin/queue
+monitor : bin/monitor
+
+bin/monitor : obj/monitor.o
+	gcc -g obj/monitor.o -o bin/monitor
+
+obj/monitor.o : src/monitor.c
+	gcc -Wall -g -c src/monitor.c -o obj/monitor.o
 
 bin/sdstored: obj/sdstored.o
 	gcc -g obj/sdstored.o -o bin/sdstored
@@ -18,6 +24,5 @@ bin/sdstore: obj/sdstore.o
 obj/sdstore.o: src/sdstore.c
 	gcc -Wall -g -c src/sdstore.c -o obj/sdstore.o
 
-
 clean:
-	rm obj/* tmp/* bin/{sdstore,sdstored}
+	rm obj/* tmp/* bin/{sdstore,sdstored,monitor}

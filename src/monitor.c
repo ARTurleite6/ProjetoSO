@@ -66,7 +66,6 @@ void push(char **pedido, int num_transf){
 
 char **process_request(char *request, int *size){
     char **pedidos = (char**)malloc(sizeof(char *) * 40);     
-    int max = 20;
 
     int i = 0;
     for(char *token = strtok(request, " "); token != NULL; token = strtok(NULL, " ")){
@@ -135,84 +134,99 @@ void execute(){
                 _exit(1);
             }
             write(client_pipe, "executing\n", sizeof("executing\n"));
-;
 
-            //pipeline de execucao
-            for(int i = 2; i < aux->n_pedidos - 1; ++i){
-                if(i == 2){
-                    if(pipe(pd[current_pipe]) < 0){
-                        perror("Error creating pipe an");
-                        _exit(1);
-                    }
-                    if(!fork()){
-                        close(pd[current_pipe][0]);
-                        int file = open(aux->pedidos[0], O_RDONLY);
-                        if(file < 0){
-                            perror("Error opening input file");
-                            _exit(1);
-                        }
-                        dup2(file, 0);
-                        close(file);
-                        dup2(pd[current_pipe][1], 1);
-                        close(pd[current_pipe][1]);
-                        char transform[100];
-                        snprintf(transform, sizeof(transform), "%s/%s", directory, aux->pedidos[i]);
-                        execlp(transform, transform, NULL);
-                        perror("Error executing request");
-                        _exit(1);
-                    }
-                    else{
-                        close(pd[current_pipe][1]);
-                        ++current_pipe;
-                    }
-                }
-                else if(i != aux->n_pedidos - 2){
-                    if(pipe(pd[current_pipe]) < 0){
-                        perror("Error creating pipe an");
-                        _exit(1);
-                    }
-                    if(!fork()){
-                        close(pd[current_pipe][0]);
-                        dup2(pd[current_pipe - 1][0], 0);
-                        close(pd[current_pipe - 1][0]);
-                        dup2(pd[current_pipe][1], 1);
-                        close(pd[current_pipe][1]);
-                        char transform[100];
-                        snprintf(transform, sizeof(transform), "%s/%s", directory, aux->pedidos[i]);
-                        execlp(transform, transform, NULL);
-                        perror("Error executing request");
-                        _exit(1);
-                    }
-                    else{
-                        close(pd[current_pipe][1]);
-                        close(pd[current_pipe - 1][0]);
-                    }
-                }
-                if(i == aux->n_pedidos - 2){
-                    if(!(ultimo = fork())){
-                        int file = open(aux->pedidos[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
-                        if(file < 0){
-                            perror("Error opening input file");
-                            _exit(1);
-                        }
-                        dup2(file, 1);
-                        close(file);
-                        dup2(pd[current_pipe - 1][0], 0);
-                        close(pd[current_pipe - 1][0]);
-                        char transform[100];
-                        snprintf(transform, sizeof(transform), "%s/%s", directory, aux->pedidos[i]);
-                        execlp(transform, transform, NULL);
-                        perror("Error executing request");
-                        _exit(1);
-                    }
-                    else{
-                        close(pd[current_pipe - 1][0]);
-                    }
+
+            if(aux->n_pedidos == 4){
+                if(!(ultimo = fork())){
+                    int fd1 = open(aux->pedidos[0], O_RDONLY);
+                    dup2(fd1, 0);
+                    close(fd1);
+                    int fd2 = open(aux->pedidos[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+                    dup2(fd2, 1);
+                    close(fd2);
+                    char transform[100];
+                    snprintf(transform, sizeof(transform), "%s/%s", directory,
+                             aux->pedidos[2]);
+                    execlp(transform, transform, NULL);
+                    perror("Error executing command");
                 }
             }
-
+            else{
+              // pipeline de execucao
+              for (int i = 2; i < aux->n_pedidos - 1; ++i) {
+                if (i == 2) {
+                  if (pipe(pd[current_pipe]) < 0) {
+                    perror("Error creating pipe an");
+                    _exit(1);
+                  }
+                  if (!fork()) {
+                    close(pd[current_pipe][0]);
+                    int file = open(aux->pedidos[0], O_RDONLY);
+                    if (file < 0) {
+                      perror("Error opening input file");
+                      _exit(1);
+                    }
+                    dup2(file, 0);
+                    close(file);
+                    dup2(pd[current_pipe][1], 1);
+                    close(pd[current_pipe][1]);
+                    char transform[100];
+                    snprintf(transform, sizeof(transform), "%s/%s", directory,
+                             aux->pedidos[i]);
+                    execlp(transform, transform, NULL);
+                    perror("Error executing request");
+                    _exit(1);
+                  } else {
+                    close(pd[current_pipe][1]);
+                    ++current_pipe;
+                  }
+                } else if (i == aux->n_pedidos - 2) {
+                  if (!(ultimo = fork())) {
+                    int file = open(aux->pedidos[1],
+                                    O_WRONLY | O_CREAT | O_TRUNC, 0664);
+                    if (file < 0) {
+                      perror("Error opening input file");
+                      _exit(1);
+                    }
+                    dup2(file, 1);
+                    close(file);
+                    dup2(pd[current_pipe - 1][0], 0);
+                    close(pd[current_pipe - 1][0]);
+                    char transform[100];
+                    snprintf(transform, sizeof(transform), "%s/%s", directory,
+                             aux->pedidos[i]);
+                    execlp(transform, transform, NULL);
+                    perror("Error executing request");
+                    _exit(1);
+                  } else {
+                    close(pd[current_pipe - 1][0]);
+                  }
+                } else {
+                  if (pipe(pd[current_pipe]) < 0) {
+                    perror("Error creating pipe an");
+                    _exit(1);
+                  }
+                  if (!fork()) {
+                    close(pd[current_pipe][0]);
+                    dup2(pd[current_pipe - 1][0], 0);
+                    close(pd[current_pipe - 1][0]);
+                    dup2(pd[current_pipe][1], 1);
+                    close(pd[current_pipe][1]);
+                    char transform[100];
+                    snprintf(transform, sizeof(transform), "%s/%s", directory,
+                             aux->pedidos[i]);
+                    execlp(transform, transform, NULL);
+                    perror("Error executing request");
+                    _exit(1);
+                  } else {
+                    close(pd[current_pipe][1]);
+                    close(pd[current_pipe - 1][0]);
+                  }
+                }
+              }
+}
             waitpid(ultimo, NULL, 0);
-            int fd = open("server_monitor", O_WRONLY);
+            int fd = open("./tmp/server_monitor", O_WRONLY);
             char message[100];
             int n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
             write(fd, message, n_bytes);
@@ -238,8 +252,6 @@ int main(int argc, char *argv[]){
     
     directory = strdup(argv[2]);
     
-    // signal(SIGCHLD, sigchld_handler);
-
     int config = open(argv[1], O_RDONLY);
     if (config < 0) {
         perror("File doesn't exist");
@@ -263,7 +275,7 @@ int main(int argc, char *argv[]){
     close(config);
 
     /* while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){ */
-    int server_monitor = open("server_monitor", O_RDONLY);
+    int server_monitor = open("./tmp/server_monitor", O_RDONLY);
     while (1) {
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
