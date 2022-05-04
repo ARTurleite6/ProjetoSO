@@ -6,6 +6,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <signal.h>
+
+int id_monitor;
+
+void sigterm_handler(int sig){
+  int pipe = open("./tmp/server_monitor", O_WRONLY);
+  write(pipe, "SIGTERM", sizeof("SIGTERM"));
+  close(pipe);
+  waitpid(id_monitor, NULL, 0);
+  puts("Terminei de forma graciosa (͡• ͜ʖ ͡•)");
+  kill(getpid(), SIGKILL);
+}
 
 struct config{
     char *idTransf[7];
@@ -18,14 +30,6 @@ struct fila{
     int n_pedidos;
     struct fila *next;
 };
-
-struct fila *push(struct fila *q, char **pedido, int num_transf){
-    struct fila *new = (struct fila *)malloc(sizeof(struct fila)); 
-    new->next = q;
-    new->pedidos = pedido;
-    new->n_pedidos = num_transf;
-    return new;
-}
 
 char buffer[1024];
 int inicio = 0;
@@ -115,13 +119,12 @@ int main(int argc, char *argv[]){
     /* } */
     /* close(fd); */
     /*  */
+    signal(SIGTERM, sigterm_handler);
+
     mkfifo("./tmp/server_monitor", 0664);
-    if(!fork()){
+    if(!(id_monitor = fork())){
         execl("./bin/monitor", "./bin/monitor", argv[1], argv[2], NULL);
         perror("Error executing");
-        _exit(1);
-    }
-    if(!fork()){
         _exit(1);
     }
     mkfifo("./tmp/client_server", 0664);     

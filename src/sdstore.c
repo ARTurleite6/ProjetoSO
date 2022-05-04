@@ -47,10 +47,11 @@ int main(int argc, char *argv[]){
         int answer_bytes = 0;
         char answer[1024];
         while((answer_bytes = read(client_pipe, answer, sizeof(answer))) > 0){
-            write(1, answer, answer_bytes);
-            answer[answer_bytes] = 0;
-            if(strcmp(answer, "concluded\n") == 0){
+            if (strcmp(answer, "concluded\n") == 0) {
                 close(close_pipe);
+            } else {
+                write(1, answer, answer_bytes);
+                answer[answer_bytes] = 0;
             }
         }
         close(client_pipe);

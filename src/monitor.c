@@ -13,6 +13,7 @@ struct config{
     char *idTransf[7];
     int limit[7];
     int current[7];
+    int bytes_lidos, bytes_escritos;
 };
 
 char *directory = NULL;
@@ -135,8 +136,28 @@ void execute(){
             }
             write(client_pipe, "executing\n", sizeof("executing\n"));
 
+            int leitura[2];
+            pipe(leitura);
+            if(!fork()){
+              close(leitura[0]);
+              char buffer[4096];
+              int fd = open(aux->pedidos[0], O_RDONLY);
+              int n_bytes = 0;
+              int total_bytes = 0;
+              while((n_bytes = read(fd, buffer, sizeof(buffer))) > 0){
+                total_bytes += n_bytes;
+              }
+              close(fd);
+              char answer[100];
+              int n = snprintf(answer, sizeof(answer), "bytes-input: %d", total_bytes);
+              write(leitura[1], answer, n);
+              close(leitura[1]);
+              _exit(0);
+            }
+            close(leitura[1]);
 
             if(aux->n_pedidos == 4){
+
                 if(!(ultimo = fork())){
                     int fd1 = open(aux->pedidos[0], O_RDONLY);
                     dup2(fd1, 0);
@@ -149,6 +170,7 @@ void execute(){
                              aux->pedidos[2]);
                     execlp(transform, transform, NULL);
                     perror("Error executing command");
+                    exit(1);
                 }
             }
             else{
@@ -226,10 +248,25 @@ void execute(){
               }
 }
             waitpid(ultimo, NULL, 0);
+            int n_bytes = 0;
+            char bytes_read[100];
+            read(leitura[0], bytes_read, sizeof(bytes_read));
+            close(leitura[0]);
+            int output_bytes = open(aux->pedidos[1], O_RDONLY);
+            char buffer[4096];
+            int total_bytes = 0;
+            while((n_bytes = read(output_bytes, buffer, sizeof(buffer))) > 0){
+              total_bytes += n_bytes;
+            }
+            close(output_bytes);
             int fd = open("./tmp/server_monitor", O_WRONLY);
             char message[100];
-            int n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
+            n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
             write(fd, message, n_bytes);
+            n_bytes = snprintf(buffer, sizeof(buffer), "concluded (%s, bytes-output: %d\n", bytes_read, total_bytes);
+            int answer_bytes = open(aux->pedidos[aux->n_pedidos - 1], O_WRONLY);
+            write(answer_bytes, buffer, n_bytes);
+            close(answer_bytes);
             write(client_pipe, "concluded\n", sizeof("concluded\n"));
             close(client_pipe);
             free(aux);
@@ -280,6 +317,11 @@ int main(int argc, char *argv[]){
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
             line[n_bytes] = 0;
+            if(strcmp(line, "SIGTERM") == 0) {
+              while(queue != NULL) execute();
+              while(wait(NULL) != -1);
+              break;
+            }
             int n_transf = 0;
             char **request = process_request(line, &n_transf);
             if (strcmp(request[0], "status") == 0) {
@@ -330,4 +372,5 @@ int main(int argc, char *argv[]){
 
     close(server_monitor);
 
+  return 0;
 }
