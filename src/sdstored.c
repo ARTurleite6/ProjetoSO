@@ -54,7 +54,7 @@ int readln(int fd, char *line, int size){
 }
 
 char **process_request(char *request, int *size){
-    char **pedidos = (char**)malloc(sizeof(char *) * 40);     
+    char *pedidos[100];
 
     int i = 0;
     for(char *token = strtok(request, " "); token != NULL; token = strtok(NULL, " ")){
@@ -63,7 +63,11 @@ char **process_request(char *request, int *size){
 
     *size = i;
 
-    return pedidos;
+    char **requests = (char **)malloc(sizeof(char *) * i);
+    for(int j = 0; j < i; j++){
+        requests[j] = pedidos[j];
+    }
+    return requests;
 }
 
 struct fila *execute(struct fila *queue, struct config *config){
@@ -168,6 +172,10 @@ int main(int argc, char *argv[]){
             /* close(fd); */
             /* queue = execute(queue, &configuracao); */
         }
+        for(int i = 0; i < n_transf; ++i){
+            free(pedido[i]);
+        }
+        free(pedido);
     }
 
     close(read_pipe);

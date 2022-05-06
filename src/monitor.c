@@ -23,11 +23,15 @@ struct fila *queue = NULL;
 int exit_program = 0;
 
 void sigusr2_handler(int signum){
-
+    
 }
 
 void sigusr1_handler(int signum){
     exit_program = 1;
+}
+
+void sigchld_handler(int signum){
+    waitpid(-1, NULL, WNOHANG);
 }
 
 pid_t pids[1024];
@@ -62,7 +66,7 @@ void push(char **pedido, int num_transf){
 }
 
 char **process_request(char *request, int *size){
-    char **pedidos = (char**)malloc(sizeof(char *) * 40);     
+    char *pedidos[100];
 
     int i = 0;
     for(char *token = strtok(request, " "); token != NULL; token = strtok(NULL, " ")){
@@ -71,7 +75,12 @@ char **process_request(char *request, int *size){
 
     *size = i;
 
-    return pedidos;
+    char **requests = (char **)malloc(sizeof(char *) * i);
+    for(int j = 0; j < i; ++j){
+        requests[j] = pedidos[j];
+    }
+
+    return requests;
 }
 
 
@@ -101,7 +110,7 @@ int readln(int fd, char *line, int size){
 void execute(){
     struct config *pedido = (struct config *)malloc(sizeof(struct config));
     for(int i = 0; i < 7; ++i){
-    pedido->idTransf[i] = strdup(configuracao.idTransf[i]);
+        pedido->idTransf[i] = strdup(configuracao.idTransf[i]);
     }
     int pode = 1;
     for(int i = 0; i < 7 && pode; ++i){
@@ -249,15 +258,28 @@ void execute(){
             sscanf(aux->pedidos[aux->n_pedidos - 1], "./tmp/server_cliente%d", &id_cliente);
             kill(id_cliente, SIGUSR1);
 
+            for(int i = 0; i < aux->n_pedidos; ++i){
+                free(aux->pedidos[i]);
+            }
             free(aux);
 
             _exit(0);
         }
 
+        for(int i = 0; i < aux->n_pedidos; ++i){
+            free(aux->pedidos[i]);
+        }
+        free(aux);
         pids[last_process] = pid;
         pedidos[last_process] = pedido;
         ++last_process;
 
+    }
+    else{
+        for(int i = 0; i < 7; ++i){
+            free(pedido->idTransf[i]);
+        }
+        free(pedido);
     }
 }
 
@@ -294,7 +316,6 @@ int main(int argc, char *argv[]){
     }
     close(config);
 
-    /* while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){ */
     int server_monitor = open("./tmp/server_monitor", O_RDONLY);
     while (1) {
         n_bytes = read(server_monitor, line, sizeof(line));
@@ -310,11 +331,10 @@ int main(int argc, char *argv[]){
                 char answer[1024];
                 int n_bytes_answer = 0;
                 for (int i = 0; i < 7; ++i) {
-                    n_bytes_answer += snprintf(
-                        answer + n_bytes_answer,
-                        sizeof(answer) - n_bytes_answer, "%s : %d/%d\n",
-                        configuracao.idTransf[i], configuracao.current[i],
-                        configuracao.limit[i]);
+                  n_bytes_answer += snprintf(
+                      answer + n_bytes_answer, sizeof(answer) - n_bytes_answer,
+                      "%s : %d/%d\n", configuracao.idTransf[i],
+                      configuracao.current[i], configuracao.limit[i]);
                 }
                 int fd = open(request[1], O_WRONLY);
                 if (fd < 0) {
@@ -323,17 +343,24 @@ int main(int argc, char *argv[]){
                 }
                 write(fd, answer, n_bytes_answer);
                 close(fd);
+                for(int i = 0; i < n_transf; ++i){
+                    free(request[i]);
+                }
+                free(request);
             } 
             else if(strcmp(request[0], "terminou") == 0){
               pid_t pid = atoi(request[1]);
               int i = -1;
+              waitpid(pid, NULL, 0);
               for(i = 0; i < last_process; ++i){
                 if(pid == pids[i]) break;
               }
               if(i != -1){
                 for(int j = 0; j < 7; ++j){
                   configuracao.current[j] -= pedidos[i]->current[j];
+                  free(pedidos[i]->idTransf[j]);
                 }
+                free(pedidos[i]);
               }
             }
             else if(!exit_program){
