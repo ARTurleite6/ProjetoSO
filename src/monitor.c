@@ -136,26 +136,6 @@ void execute(){
             }
             write(client_pipe, "executing\n", sizeof("executing\n"));
 
-            int leitura[2];
-            pipe(leitura);
-            if(!fork()){
-              close(leitura[0]);
-              char buffer[4096];
-              int fd = open(aux->pedidos[0], O_RDONLY);
-              int n_bytes = 0;
-              int total_bytes = 0;
-              while((n_bytes = read(fd, buffer, sizeof(buffer))) > 0){
-                total_bytes += n_bytes;
-              }
-              close(fd);
-              char answer[100];
-              int n = snprintf(answer, sizeof(answer), "bytes-input: %d", total_bytes);
-              write(leitura[1], answer, n);
-              close(leitura[1]);
-              _exit(0);
-            }
-            close(leitura[1]);
-
             if(aux->n_pedidos == 4){
 
                 if(!(ultimo = fork())){
@@ -249,23 +229,23 @@ void execute(){
 }
             waitpid(ultimo, NULL, 0);
             int n_bytes = 0;
-            char bytes_read[100];
-            read(leitura[0], bytes_read, sizeof(bytes_read));
-            close(leitura[0]);
-            int output_bytes = open(aux->pedidos[1], O_RDONLY);
-            char buffer[4096];
-            int total_bytes = 0;
-            while((n_bytes = read(output_bytes, buffer, sizeof(buffer))) > 0){
-              total_bytes += n_bytes;
-            }
-            close(output_bytes);
             int fd = open("./tmp/server_monitor", O_WRONLY);
             char message[100];
             n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
             write(fd, message, n_bytes);
-            n_bytes = snprintf(buffer, sizeof(buffer), "concluded (%s, bytes-output: %d\n", bytes_read, total_bytes);
+
+            int input = open(aux->pedidos[0], O_RDONLY);
+            int bytes_input = lseek(input, 0, SEEK_END);
+            close(input);
+            int output = open(aux->pedidos[1], O_RDONLY);
+            int bytes_output = lseek(output, 0, SEEK_END);
+            close(output);
+
+            char answer[100];
+            n_bytes = snprintf(answer, sizeof(answer), "concluded (bytes-input: %d, bytes-output: %d\n", bytes_input, bytes_output);
+
             int answer_bytes = open(aux->pedidos[aux->n_pedidos - 1], O_WRONLY);
-            write(answer_bytes, buffer, n_bytes);
+            write(answer_bytes, answer, n_bytes);
             close(answer_bytes);
             write(client_pipe, "concluded\n", sizeof("concluded\n"));
             close(client_pipe);
