@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <signal.h>
 
 void execute();
 
@@ -27,7 +28,6 @@ void sigusr2_handler(int signum){
 }
 
 void sigusr1_handler(int signum){
-    puts("ola\n");
     while(queue != NULL) execute();
     while(wait(NULL) != -1);
     exit_program = 1;
@@ -257,11 +257,13 @@ void execute(){
             char answer[100];
             n_bytes = snprintf(answer, sizeof(answer), "concluded (bytes-input: %d, bytes-output: %d\n", bytes_input, bytes_output);
 
-            int answer_bytes = open(aux->pedidos[aux->n_pedidos - 1], O_WRONLY);
-            write(answer_bytes, answer, n_bytes);
-            close(answer_bytes);
-            write(client_pipe, "concluded\n", sizeof("concluded\n"));
+            write(client_pipe, answer, n_bytes);
             close(client_pipe);
+
+            int id_cliente; 
+            sscanf(aux->pedidos[aux->n_pedidos - 1], "./tmp/server_cliente%d", &id_cliente);
+            kill(id_cliente, SIGUSR1);
+
             free(aux);
 
             _exit(0);

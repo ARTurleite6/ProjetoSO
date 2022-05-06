@@ -4,10 +4,17 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <signal.h>
+
+int close_pipe;
+void sigusr1_handler(int signum){
+    close(close_pipe);
+}
 
 int main(int argc, char *argv[]){
     int n_bytes = 0;
     char request[200];
+    signal(SIGUSR1, sigusr1_handler);
 
     pid_t pid = getpid();
 
@@ -43,16 +50,12 @@ int main(int argc, char *argv[]){
     else{
 
         int client_pipe = open(client_pipe_str, O_RDONLY);
-        int close_pipe = open(client_pipe_str, O_WRONLY);
+        close_pipe = open(client_pipe_str, O_WRONLY);
         int answer_bytes = 0;
         char answer[1024];
         while((answer_bytes = read(client_pipe, answer, sizeof(answer))) > 0){
-            if (strcmp(answer, "concluded\n") == 0) {
-                close(close_pipe);
-            } else {
-                write(1, answer, answer_bytes);
-                answer[answer_bytes] = 0;
-            }
+            write(1, answer, answer_bytes);
+            answer[answer_bytes] = 0;
         }
         close(client_pipe);
     }
