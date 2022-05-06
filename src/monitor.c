@@ -20,6 +20,19 @@ char *directory = NULL;
 
 struct fila *queue = NULL;
 
+int exit_program = 0;
+
+void sigusr2_handler(int signum){
+
+}
+
+void sigusr1_handler(int signum){
+    puts("ola\n");
+    while(queue != NULL) execute();
+    while(wait(NULL) != -1);
+    exit_program = 1;
+}
+
 pid_t pids[1024];
 int last_process = 0;
 struct config *pedidos[1024];
@@ -266,7 +279,10 @@ int main(int argc, char *argv[]){
         perror("Wrong arguments");
         exit(1);
     }
+
+    signal(SIGUSR1, sigusr1_handler);
     
+    exit_program = 0;
     directory = strdup(argv[2]);
     
     int config = open(argv[1], O_RDONLY);
@@ -293,7 +309,7 @@ int main(int argc, char *argv[]){
 
     /* while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){ */
     int server_monitor = open("./tmp/server_monitor", O_RDONLY);
-    while (1) {
+    while (!exit_program) {
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
             line[n_bytes] = 0;

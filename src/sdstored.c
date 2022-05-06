@@ -11,12 +11,12 @@
 int id_monitor;
 
 void sigterm_handler(int sig){
-  int pipe = open("./tmp/server_monitor", O_WRONLY);
-  write(pipe, "SIGTERM", sizeof("SIGTERM"));
-  close(pipe);
-  waitpid(id_monitor, NULL, 0);
-  puts("Terminei de forma graciosa (͡• ͜ʖ ͡•)");
-  kill(getpid(), SIGKILL);
+
+    kill(id_monitor, SIGUSR1); 
+    
+    waitpid(id_monitor, NULL, 0);
+    puts("Terminei de forma graciosa (͡• ͜ʖ ͡•)");
+    kill(getpid(), SIGKILL);
 }
 
 struct config{
