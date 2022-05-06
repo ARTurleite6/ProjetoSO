@@ -14,7 +14,6 @@ struct config{
     char *idTransf[7];
     int limit[7];
     int current[7];
-    int bytes_lidos, bytes_escritos;
 };
 
 char *directory = NULL;
@@ -28,8 +27,6 @@ void sigusr2_handler(int signum){
 }
 
 void sigusr1_handler(int signum){
-    while(queue != NULL) execute();
-    while(wait(NULL) != -1);
     exit_program = 1;
 }
 
@@ -44,20 +41,6 @@ int find_pid(pid_t pid){
         if(pid == pids[i]) return i;
     }
     return -1;
-}
-
-void sigchld_handler(){
-    pid_t pid = -1;
-    while((pid = waitpid(-1, NULL, WNOHANG)) != -1){
-        int i = find_pid(pid);
-        if(i != -1){
-            for(int j = 0; j < 7; ++j){
-                configuracao.current[j] -= pedidos[i]->current[j];
-            }
-            free(pedidos[i]);
-            pedidos[i] = NULL;
-        }
-    }
 }
 
 struct fila{
@@ -117,7 +100,9 @@ int readln(int fd, char *line, int size){
 
 void execute(){
     struct config *pedido = (struct config *)malloc(sizeof(struct config));
-    memcpy(pedido, &configuracao, sizeof(struct config));
+    for(int i = 0; i < 7; ++i){
+    pedido->idTransf[i] = strdup(configuracao.idTransf[i]);
+    }
     int pode = 1;
     for(int i = 0; i < 7 && pode; ++i){
         pedido->current[i] = 0;
@@ -239,7 +224,7 @@ void execute(){
                   }
                 }
               }
-}
+            }
             waitpid(ultimo, NULL, 0);
             int n_bytes = 0;
             int fd = open("./tmp/server_monitor", O_WRONLY);
@@ -311,14 +296,13 @@ int main(int argc, char *argv[]){
 
     /* while((n_bytes = read(server_monitor, line, sizeof(line))) > 0){ */
     int server_monitor = open("./tmp/server_monitor", O_RDONLY);
-    while (!exit_program) {
+    while (1) {
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
             line[n_bytes] = 0;
-            if(strcmp(line, "SIGTERM") == 0) {
-              while(queue != NULL) execute();
-              while(wait(NULL) != -1);
-              break;
+            
+            if(exit_program){
+                if (queue == NULL) while(wait(NULL) != -1);
             }
             int n_transf = 0;
             char **request = process_request(line, &n_transf);
@@ -352,7 +336,7 @@ int main(int argc, char *argv[]){
                 }
               }
             }
-            else {
+            else if(!exit_program){
                 push(request, n_transf);
                 int fd = open(request[n_transf - 1], O_WRONLY);
                 if (fd < 0) {
