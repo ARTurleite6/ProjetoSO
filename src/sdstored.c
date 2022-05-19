@@ -139,43 +139,27 @@ int main(int argc, char *argv[]){
     char line[1024];
     int n_bytes = 0;
     int monitor_pipe;
-    while((n_bytes = read(read_pipe, line, sizeof(line))) > 0){
-        monitor_pipe = open("./tmp/server_monitor", O_WRONLY);
-        write(monitor_pipe, line, n_bytes);
-        close(monitor_pipe);
-        line[n_bytes] = 0;
-        int n_transf = 0;
-        char **pedido = process_request(line, &n_transf);
-        /* if(strcmp(pedido[0], "status") == 0){ */
-        /*     if(!fork()){ */
-        /*         int fd = open(pedido[1], O_WRONLY); */
-        /*         if(fd < 0){ */
-        /*             perror("Error opening pipe"); */
-        /*             exit(1); */
-        /*         } */
-        /*         close(fd); */
-        /*         _exit(0); */
-        /*     } */
-        /* } */
-        if(strcmp(pedido[0], "exit") == 0){
-            close(close_pipe);
-        }
-        else{
-            /* write(monitor_pipe, line, n_bytes); */
-            /* queue = push(queue, pedido, n_transf);  */
-            /* int fd = open(pedido[n_transf - 1], O_WRONLY); */
-            /* if(fd < 0){ */
-            /*     perror("Error opening pipe");  */
-            /*     exit(1); */
-            /* } */
-            /* write(fd, "pending\n", sizeof("pending\n")); */
-            /* close(fd); */
-            /* queue = execute(queue, &configuracao); */
-        }
-        for(int i = 0; i < n_transf; ++i){
-            free(pedido[i]);
+    while((n_bytes = read(read_pipe, line, sizeof(line) - 1)) > 0){
+      line[n_bytes] = 0;
+      char *linecpy = strdup(line);
+      char *to_free = linecpy;
+      int n_transf = 0;
+      char **pedido = process_request(linecpy, &n_transf);
+
+      if(strcmp(pedido[0], "exit") == 0){
+        close(close_pipe);
+      }
+      else{
+          monitor_pipe = open("./tmp/server_monitor", O_WRONLY);
+          write(monitor_pipe, line, n_bytes);
+          close(monitor_pipe);
+      }
+
+      for (int i = 0; i < n_transf; ++i) {
+          free(pedido[i]);
         }
         free(pedido);
+        free(to_free);
     }
 
     close(read_pipe);
