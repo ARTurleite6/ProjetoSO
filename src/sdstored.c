@@ -28,6 +28,7 @@ struct config{
 struct fila{
     char **pedidos;
     int n_pedidos;
+    int prioridade;
     struct fila *next;
 };
 
