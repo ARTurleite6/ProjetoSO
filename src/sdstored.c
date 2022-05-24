@@ -15,23 +15,23 @@ void sigterm_handler(int sig){
     kill(id_monitor, SIGUSR1); 
     
     waitpid(id_monitor, NULL, 0);
-    puts("Terminei de forma graciosa (͡• ͜ʖ ͡•)");
+
     kill(getpid(), SIGKILL);
 }
 
-struct config{
-    char *idTransf[7];
-    int limit[7];
-    int current[7];
-};
-
-struct fila{
-    char **pedidos;
-    int n_pedidos;
-    int prioridade;
-    struct fila *next;
-};
-
+/* struct config{ */
+/*     char *idTransf[7]; */
+/*     int limit[7]; */
+/*     int current[7]; */
+/* }; */
+/*  */
+/* struct fila{ */
+/*     char **pedidos; */
+/*     int n_pedidos; */
+/*     int priority; */
+/*     struct fila *next; */
+/* }; */
+/*  */
 char buffer[1024];
 int inicio = 0;
 int fim = 0;
@@ -71,28 +71,6 @@ char **process_request(char *request, int *size){
     return requests;
 }
 
-struct fila *execute(struct fila *queue, struct config *config){
-    struct config pedido;
-    memcpy(&pedido, config, sizeof(struct config));
-    int pode = 1;
-    for(int i = 0; i < 7 && pode; ++i){
-        pedido.current[i] = 0;
-        for(int j = 2; j < queue->n_pedidos && pode; ++j){
-            if(strcmp(queue->pedidos[j], pedido.idTransf[i]) == 0){
-                ++pedido.current[i];
-                if(pedido.current[i] > config->limit[i]) pode = 0;
-            }
-        }
-    }
-
-    if(!pode) return queue;
-    
-    for(int i = 0; i < 7; ++i){
-        printf("%s -> %d\n", pedido.idTransf[i], pedido.current[i]);
-    }
-    return queue;
-}
-
 int main(int argc, char *argv[]){
 
     if(argc < 3){
@@ -106,24 +84,6 @@ int main(int argc, char *argv[]){
         return EXIT_FAILURE;
     }
 
-    /* struct config configuracao; */
-    /*  */
-    /* struct fila *queue = NULL; */
-    /*  */
-    /* int i = 0; */
-    /* int n_bytes = 0; */
-    /* char line[1024]; */
-    /* while((n_bytes = readln(fd, line, sizeof(line))) > 0){ */
-    /*     line[n_bytes - 1] = 0; */
-    /*     char *transform = strtok(line, " "); */
-    /*     configuracao.idTransf[i] = strdup(transform); */
-    /*     int limit = atoi(strtok(NULL, " ")); */
-    /*     configuracao.limit[i] = limit; */
-    /*     configuracao.current[i] = 0; */
-    /*     i++; */
-    /* } */
-    /* close(fd); */
-    /*  */
     signal(SIGTERM, sigterm_handler);
 
     mkfifo("./tmp/server_monitor", 0664);
@@ -150,7 +110,13 @@ int main(int argc, char *argv[]){
       if(strcmp(pedido[0], "exit") == 0){
         close(close_pipe);
       }
-      else{
+      else if(!strcmp(pedido[0], "proc-file")){
+          monitor_pipe = open("./tmp/server_monitor", O_WRONLY);
+          write(monitor_pipe, line + 10, n_bytes - 10);
+          close(monitor_pipe);
+      }
+
+      else if(!strcmp(pedido[0], "status")){
           monitor_pipe = open("./tmp/server_monitor", O_WRONLY);
           write(monitor_pipe, line, n_bytes);
           close(monitor_pipe);

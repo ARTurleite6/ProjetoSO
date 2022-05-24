@@ -18,6 +18,7 @@ struct config{
 struct fila{
     char **pedidos;
     int n_pedidos;
+    int priority;
     struct fila *next;
 };
 
@@ -50,11 +51,13 @@ struct config configuracao;
 
 void push(struct fila **fila, char **pedido, int num_transf){
     struct fila *new = (struct fila *)malloc(sizeof(struct fila)); 
-    while(*fila){
+    int priority = atoi(pedido[0]);
+    while(*fila && priority < (*fila)->priority){
       fila = &((*fila)->next);
     }
-    new->next = NULL;
+    new->next = *fila;
     new->pedidos = pedido;
+    new->priority = priority;
     new->n_pedidos = num_transf;
     *fila = new;
 }
@@ -121,7 +124,7 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
     int pode = 1;
     for(int i = 0; i < 7 && pode; ++i){
         pedido->current[i] = 0;
-        for(int j = 2; j < queue->n_pedidos && pode; ++j){
+        for(int j = 3; j < queue->n_pedidos && pode; ++j){
             if(strcmp(queue->pedidos[j], pedido->idTransf[i]) == 0){
                 ++pedido->current[i];
                 if(pedido->current[i] + configuracao.current[i] > configuracao.limit[i]) pode = 0;
@@ -149,18 +152,18 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             }
             write(client_pipe, "executing\n", sizeof("executing\n"));
 
-            if(aux->n_pedidos == 4){
-
+            if(aux->n_pedidos == 5){
                 if(!(ultimo = fork())){
-                    int fd1 = open(aux->pedidos[0], O_RDONLY);
+                    int fd1 = open(aux->pedidos[1], O_RDONLY);
                     dup2(fd1, 0);
                     close(fd1);
-                    int fd2 = open(aux->pedidos[1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+                    int fd2 = open(aux->pedidos[2], O_WRONLY | O_CREAT | O_TRUNC, 0664);
                     dup2(fd2, 1);
                     close(fd2);
                     char transform[100];
                     snprintf(transform, sizeof(transform), "%s/%s", directory,
-                             aux->pedidos[2]);
+                             aux->pedidos[3]);
+                    puts(transform);
                     execlp(transform, transform, NULL);
                     perror("Error executing command");
                     exit(1);
@@ -168,15 +171,15 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             }
             else{
               // pipeline de execucao
-              for (int i = 2; i < aux->n_pedidos - 1; ++i) {
-                if (i == 2) {
+              for (int i = 3; i < aux->n_pedidos - 1; ++i) {
+                if (i == 3) {
                   if (pipe(pd[current_pipe]) < 0) {
                     perror("Error creating pipe an");
                     _exit(1);
                   }
                   if (!fork()) {
                     close(pd[current_pipe][0]);
-                    int file = open(aux->pedidos[0], O_RDONLY);
+                    int file = open(aux->pedidos[1], O_RDONLY);
                     if (file < 0) {
                       perror("Error opening input file");
                       _exit(1);
@@ -197,7 +200,7 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
                   }
                 } else if (i == aux->n_pedidos - 2) {
                   if (!(ultimo = fork())) {
-                    int file = open(aux->pedidos[1],
+                    int file = open(aux->pedidos[2],
                                     O_WRONLY | O_CREAT | O_TRUNC, 0664);
                     if (file < 0) {
                       perror("Error opening input file");
@@ -248,10 +251,10 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
             write(fd, message, n_bytes);
 
-            int input = open(aux->pedidos[0], O_RDONLY);
+            int input = open(aux->pedidos[1], O_RDONLY);
             int bytes_input = lseek(input, 0, SEEK_END);
             close(input);
-            int output = open(aux->pedidos[1], O_RDONLY);
+            int output = open(aux->pedidos[2], O_RDONLY);
             int bytes_output = lseek(output, 0, SEEK_END);
             close(output);
 
