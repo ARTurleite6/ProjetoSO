@@ -20,16 +20,17 @@ int main(int argc, char *argv[]){
 
     n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[1]);
     int priority_flag = 0;
-    if(!strcmp("-p", argv[2])){
-        priority_flag = 1;
-    }
-    else{
-        n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "0 ");
-    }
-
-    for(int i = 2; i < argc; ++i){
-        if(priority_flag == 0 || i != 2)
-            n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[i]);
+    if(strcmp("status", argv[1]) != 0){
+        if(!strcmp("-p", argv[2])){
+            priority_flag = 1;
+        }
+        else{
+            n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "0 ");
+        }
+        for(int i = 2; i < argc; ++i){
+            if(priority_flag == 0 || i != 2)
+                n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[i]);
+        }
     }
 
     int server_pipe = open("./tmp/client_server", O_WRONLY);

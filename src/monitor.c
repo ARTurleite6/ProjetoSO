@@ -18,6 +18,9 @@ struct config{
 
 struct fila{
     char **pedidos;
+    char *file_input;
+    char *file_output;
+    char *pipe_client;
     int n_pedidos;
     int priority;
     struct fila *next;
@@ -58,13 +61,17 @@ struct config configuracao;
 void push(struct fila **fila, char **pedido, int num_transf){
     struct fila *new = (struct fila *)malloc(sizeof(struct fila)); 
     int priority = atoi(pedido[0]);
-    while(*fila && priority < (*fila)->priority){
+    free(pedido[0]);
+    while(*fila && priority <= (*fila)->priority){
       fila = &((*fila)->next);
     }
-    new->next = *fila;
-    new->pedidos = pedido;
+    new->pedidos = pedido + 3;
+    new->file_input = pedido[1];
+    new->file_output = pedido[2];
+    new->pipe_client = pedido[num_transf - 1];
     new->priority = priority;
-    new->n_pedidos = num_transf;
+    new->n_pedidos = num_transf - 4;
+    new->next = *fila;
     *fila = new;
 }
 
@@ -131,7 +138,7 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
     int pode = 1;
     for(int i = 0; i < 7 && pode; ++i){
         pedido->current[i] = 0;
-        for(int j = 3; j < queue->n_pedidos && pode; ++j){
+        for(int j = 0; j < queue->n_pedidos && pode; ++j){
             if(strcmp(queue->pedidos[j], pedido->idTransf[i]) == 0){
                 ++pedido->current[i];
                 if(pedido->current[i] + configuracao.current[i] > configuracao.limit[i]) pode = 0;
@@ -152,24 +159,24 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             int pd[aux->n_pedidos][2];
             int current_pipe = 0;
 
-            int client_pipe = open(aux->pedidos[aux->n_pedidos - 1], O_WRONLY);
+            int client_pipe = open(aux->pipe_client, O_WRONLY);
             if(client_pipe < 0){
                 perror("Error opening client_pipe");
                 _exit(1);
             }
             write(client_pipe, "executing\n", sizeof("executing\n"));
 
-            if(aux->n_pedidos == 5){
+            if(aux->n_pedidos == 1){
                 if(!(ultimo = fork())){
-                    int fd1 = open(aux->pedidos[1], O_RDONLY);
+                    int fd1 = open(aux->file_input, O_RDONLY);
                     dup2(fd1, 0);
                     close(fd1);
-                    int fd2 = open(aux->pedidos[2], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+                    int fd2 = open(aux->file_output, O_WRONLY | O_CREAT | O_TRUNC, 0664);
                     dup2(fd2, 1);
                     close(fd2);
                     char transform[100];
                     snprintf(transform, sizeof(transform), "%s/%s", directory,
-                             aux->pedidos[3]);
+                             aux->pedidos[0]);
                     execlp(transform, transform, NULL);
                     perror("Error executing command");
                     exit(1);
@@ -177,15 +184,15 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             }
             else{
               // pipeline de execucao
-              for (int i = 3; i < aux->n_pedidos - 1; ++i) {
-                if (i == 3) {
+              for (int i = 0; i < aux->n_pedidos; ++i) {
+                if (i == 0) {
                   if (pipe(pd[current_pipe]) < 0) {
                     perror("Error creating pipe an");
                     _exit(1);
                   }
                   if (!fork()) {
                     close(pd[current_pipe][0]);
-                    int file = open(aux->pedidos[1], O_RDONLY);
+                    int file = open(aux->file_input, O_RDONLY);
                     if (file < 0) {
                       perror("Error opening input file");
                       _exit(1);
@@ -204,9 +211,9 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
                     close(pd[current_pipe][1]);
                     ++current_pipe;
                   }
-                } else if (i == aux->n_pedidos - 2) {
+                } else if (i == aux->n_pedidos - 1) {
                   if (!(ultimo = fork())) {
-                    int file = open(aux->pedidos[2],
+                    int file = open(aux->file_output,
                                     O_WRONLY | O_CREAT | O_TRUNC, 0664);
                     if (file < 0) {
                       perror("Error opening input file");
@@ -257,10 +264,10 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             n_bytes = snprintf(message, sizeof(message), "terminou %d", getpid());
             write(fd, message, n_bytes);
 
-            int input = open(aux->pedidos[1], O_RDONLY);
+            int input = open(aux->file_input, O_RDONLY);
             int bytes_input = lseek(input, 0, SEEK_END);
             close(input);
-            int output = open(aux->pedidos[2], O_RDONLY);
+            int output = open(aux->file_output, O_RDONLY);
             int bytes_output = lseek(output, 0, SEEK_END);
             close(output);
 
@@ -271,7 +278,7 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
             close(client_pipe);
 
             int id_cliente; 
-            sscanf(aux->pedidos[aux->n_pedidos - 1], "./tmp/server_cliente%d", &id_cliente);
+            sscanf(aux->pipe_client, "./tmp/server_cliente%d", &id_cliente);
             kill(id_cliente, SIGUSR1);
 
             _exit(0);
@@ -286,11 +293,12 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
         for(int i = 0; i < aux->n_pedidos; ++i){
             free(aux->pedidos[i]);
         }
-        free(aux->pedidos);
+        free(aux->pipe_client);
+        free(aux->file_output);
+        free(aux->file_input);
+        free(aux->pedidos - 3);
         free(aux);
         push_execucao(ptr,pedido, pid);
-
-
 
     }
     else{
@@ -346,6 +354,10 @@ int main(int argc, char *argv[]){
     struct fila_execucao *queue_exec = NULL;
 
     int server_monitor = open("./tmp/server_monitor", O_RDONLY);
+    if(server_monitor < 0){
+        perror("error opening server pipe");
+        return 1;
+    }
     while (1) {
         if(exit_program){
             if (queue == NULL) {
@@ -358,7 +370,7 @@ int main(int argc, char *argv[]){
             inc_priorities_queue(queue);
             inc_priority = 0;
         }
-        
+
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
             line[n_bytes] = 0;
@@ -374,8 +386,9 @@ int main(int argc, char *argv[]){
                     n_bytes_answer +=
                         snprintf(answer + n_bytes_answer,
                                  sizeof(answer) - n_bytes_answer, "task #%d: ", (*ptr)->n_task);
-                    for (int i = 0; i < (*ptr)->task->size_task - 1; ++i) {
-                      if(i < (*ptr)->task->size_task - 2){
+
+                    for (int i = 0; i < (*ptr)->task->size_task; ++i) {
+                      if(i < (*ptr)->task->size_task - 1){
                         n_bytes_answer += snprintf(
                             answer + n_bytes_answer,
                             sizeof(answer) - n_bytes_answer, "%s ", (*ptr)->task->task[i]);
@@ -405,7 +418,7 @@ int main(int argc, char *argv[]){
                     free(request[i]);
                 }
                 free(request);
-            } 
+            }
             else if(strcmp(request[0], "terminou") == 0){
               pid_t pid = atoi(request[1]);
               waitpid(pid, NULL, 0);
@@ -427,7 +440,7 @@ int main(int argc, char *argv[]){
                 *ptr = (*ptr)->next;
                 free(aux);
               }
-             
+
             }
             else if(!exit_program){
                 push(&queue, request, n_transf);
