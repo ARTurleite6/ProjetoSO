@@ -8,6 +8,7 @@
 #include <string.h>
 #include <signal.h>
 
+int n_task;
 
 struct config{
     char *idTransf[7];
@@ -31,6 +32,7 @@ struct pedido{
 
 struct fila_execucao{
   pid_t pid;
+  int n_task;
   struct pedido *task;
   struct fila_execucao * next;
 };
@@ -38,13 +40,17 @@ struct fila_execucao{
 struct fila *execute(struct fila *queue, struct fila_execucao **ptr);
 char *directory = NULL;
 
-// struct fila *queue = NULL;
-// struct fila_execucao *fila = NULL;
-
 int exit_program = 0;
+
+int inc_priority = 0;
 
 void sigusr1_handler(int signum){
     exit_program = 1;
+}
+
+void sigalrm_handler(int signum){
+    inc_priority = 1;
+    alarm(1);
 }
 
 struct config configuracao;
@@ -112,6 +118,7 @@ void push_execucao(struct fila_execucao **ptr, struct pedido *pedido, pid_t pid)
 
   *ptr = (struct fila_execucao *)malloc(sizeof(struct fila_execucao));
   (*ptr)->task = pedido;
+  (*ptr)->n_task = n_task++;
   (*ptr)->pid = pid;
   (*ptr)->next = NULL;
 }
@@ -163,7 +170,6 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
                     char transform[100];
                     snprintf(transform, sizeof(transform), "%s/%s", directory,
                              aux->pedidos[3]);
-                    puts(transform);
                     execlp(transform, transform, NULL);
                     perror("Error executing command");
                     exit(1);
@@ -296,15 +302,25 @@ struct fila *execute(struct fila *queue, struct fila_execucao **ptr){
     return queue;
 }
 
+void inc_priorities_queue(struct fila *queue){
+    for(; queue != NULL; queue = queue->next){
+        queue->priority += (queue->priority < 5) ? 1 : 0;
+    }
+}
+
 int main(int argc, char *argv[]){
+    
     if(argc < 3){
         perror("Wrong arguments");
         exit(1);
     }
+    n_task = 1;
 
     signal(SIGUSR1, sigusr1_handler);
+    signal(SIGALRM, sigalrm_handler);
     
     exit_program = 0;
+    inc_priority = 0;
     directory = strdup(argv[2]);
     
     int config = open(argv[1], O_RDONLY);
@@ -312,9 +328,6 @@ int main(int argc, char *argv[]){
         perror("File doesn't exist");
         return EXIT_FAILURE;
     }
-
-    /* struct config configuracao; */
-
     int i = 0;
     int n_bytes = 0;
     char line[1024];
@@ -334,16 +347,21 @@ int main(int argc, char *argv[]){
 
     int server_monitor = open("./tmp/server_monitor", O_RDONLY);
     while (1) {
+        if(exit_program){
+            if (queue == NULL) {
+                while(wait(NULL) != -1);
+                break;
+            }
+        }
+
+        if(inc_priority){
+            inc_priorities_queue(queue);
+            inc_priority = 0;
+        }
+        
         n_bytes = read(server_monitor, line, sizeof(line));
         if (n_bytes > 0) {
             line[n_bytes] = 0;
-            
-            if(exit_program){
-                if (queue == NULL) {
-                  while(wait(NULL) != -1);
-                  break;
-                }
-            }
             int n_transf = 0;
             char **request = process_request(line, &n_transf);
             if (strcmp(request[0], "status") == 0) {
@@ -355,7 +373,7 @@ int main(int argc, char *argv[]){
                 while(*ptr){
                     n_bytes_answer +=
                         snprintf(answer + n_bytes_answer,
-                                 sizeof(answer) - n_bytes_answer, "task #%d: ", j);
+                                 sizeof(answer) - n_bytes_answer, "task #%d: ", (*ptr)->n_task);
                     for (int i = 0; i < (*ptr)->task->size_task - 1; ++i) {
                       if(i < (*ptr)->task->size_task - 2){
                         n_bytes_answer += snprintf(

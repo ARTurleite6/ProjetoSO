@@ -18,8 +18,18 @@ int main(int argc, char *argv[]){
 
     pid_t pid = getpid();
 
-    for(int i = 1; i < argc; ++i){
-        n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[i]);
+    n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[1]);
+    int priority_flag = 0;
+    if(!strcmp("-p", argv[2])){
+        priority_flag = 1;
+    }
+    else{
+        n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "0 ");
+    }
+
+    for(int i = 2; i < argc; ++i){
+        if(priority_flag == 0 || i != 2)
+            n_bytes += snprintf(request + n_bytes, sizeof(request) - n_bytes, "%s ", argv[i]);
     }
 
     int server_pipe = open("./tmp/client_server", O_WRONLY);

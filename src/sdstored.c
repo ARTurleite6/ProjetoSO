@@ -18,20 +18,6 @@ void sigterm_handler(int sig){
 
     kill(getpid(), SIGKILL);
 }
-
-/* struct config{ */
-/*     char *idTransf[7]; */
-/*     int limit[7]; */
-/*     int current[7]; */
-/* }; */
-/*  */
-/* struct fila{ */
-/*     char **pedidos; */
-/*     int n_pedidos; */
-/*     int priority; */
-/*     struct fila *next; */
-/* }; */
-/*  */
 char buffer[1024];
 int inicio = 0;
 int fim = 0;
