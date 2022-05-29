@@ -1,4 +1,6 @@
-all: server client monitor
+MYDIR=temp
+
+all: server client monitor MYDIR
 
 server: bin/sdstored
 
@@ -23,6 +25,9 @@ bin/sdstore: obj/sdstore.o
 
 obj/sdstore.o: src/sdstore.c
 	gcc -Wall -g -c src/sdstore.c -o obj/sdstore.o
+
+MYDIR:
+	[ -d $(MYDIR) ] || mkdir -p $(MYDIR)
 
 clean:
 	rm obj/* tmp/* bin/{sdstore,sdstored,monitor}
